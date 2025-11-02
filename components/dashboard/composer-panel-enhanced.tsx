@@ -1,0 +1,222 @@
+/**
+ * Enhanced Composer Panel with Tiptap Rich Text Editor
+ * Supports cross-channel messaging, scheduling, and media attachments
+ */
+
+"use client"
+
+import { useState } from "react"
+import { X, Send, Paperclip, Clock, Loader2 } from "lucide-react"
+import { useEditor, EditorContent } from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
+import { useSendMessage } from "@/hooks/use-messages"
+import { useContacts } from "@/hooks/use-contacts"
+import type { MessageChannel } from "@/types/message"
+
+interface ComposerPanelProps {
+  onClose: () => void
+  contactId?: string // Pre-select a contact
+  channel?: MessageChannel // Pre-select a channel
+}
+
+export default function ComposerPanelEnhanced({ onClose, contactId: initialContactId, channel: initialChannel }: ComposerPanelProps) {
+  const [selectedChannel, setSelectedChannel] = useState<MessageChannel>(initialChannel || "WHATSAPP")
+  const [selectedContactId, setSelectedContactId] = useState<string | undefined>(initialContactId)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [scheduleTime, setScheduleTime] = useState("")
+  const [mediaUrls, setMediaUrls] = useState<string[]>([])
+
+  const { mutate: sendMessage, isPending } = useSendMessage()
+  const { data: contactsData } = useContacts({ limit: 50 })
+
+  // Tiptap editor
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: "",
+    immediatelyRender: false, // Fix SSR hydration error
+    editorProps: {
+      attributes: {
+        class: "prose prose-invert max-w-none focus:outline-none p-3 min-h-[150px]",
+      },
+    },
+  })
+
+  const channels: { value: MessageChannel; label: string }[] = [
+    { value: "WHATSAPP", label: "WhatsApp" },
+    { value: "SMS", label: "SMS" },
+    { value: "EMAIL", label: "Email" },
+  ]
+
+  const handleSend = async () => {
+    if (!editor || !selectedContactId) return
+
+    const content = editor.getText()
+    const htmlContent = editor.getHTML()
+
+    if (!content.trim()) return
+
+    sendMessage(
+      {
+        contactId: selectedContactId,
+        channel: selectedChannel,
+        content,
+        htmlContent: htmlContent !== "<p></p>" ? htmlContent : undefined,
+        mediaUrls,
+        scheduledFor: showSchedule && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
+      },
+      {
+        onSuccess: () => {
+          editor.commands.clearContent()
+          setMediaUrls([])
+          setScheduleTime("")
+          setShowSchedule(false)
+          onClose()
+        },
+        onError: (error) => {
+          console.error("Send message error:", error)
+          alert(error instanceof Error ? error.message : "Failed to send message")
+        },
+      },
+    )
+  }
+
+  const contacts = contactsData?.contacts || []
+
+  return (
+    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl flex flex-col h-full overflow-hidden w-96">
+      {/* Header */}
+      <div className="flex items-center justify-between p-5 border-b border-white/10">
+        <h3 className="text-white font-semibold">Compose Message</h3>
+        <button
+          onClick={onClose}
+          className="text-white/50 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        {/* Contact Selection */}
+        <div>
+          <label className="block text-white/70 text-xs font-medium mb-2">To:</label>
+          <select
+            value={selectedContactId || ""}
+            onChange={(e) => setSelectedContactId(e.target.value || undefined)}
+            className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+          >
+            <option value="">Select contact...</option>
+            {contacts.map((contact: any) => (
+              <option key={contact.id} value={contact.id}>
+                {contact.name || contact.email || contact.phone || contact.id}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Channel Selector */}
+        <div className="flex gap-2">
+          {channels.map((channel) => (
+            <button
+              key={channel.value}
+              onClick={() => setSelectedChannel(channel.value)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                selectedChannel === channel.value
+                  ? "bg-white text-black"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              }`}
+            >
+              {channel.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Rich Text Editor */}
+        <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px]">
+          <EditorContent editor={editor} />
+        </div>
+
+        {/* Media Attachments */}
+        {mediaUrls.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {mediaUrls.map((url, index) => (
+              <div key={index} className="relative">
+                <img src={url} alt={`Attachment ${index + 1}`} className="w-16 h-16 object-cover rounded" />
+                <button
+                  onClick={() => setMediaUrls(mediaUrls.filter((_, i) => i !== index))}
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Schedule Input */}
+        {showSchedule && (
+          <div>
+            <label className="block text-white/70 text-xs font-medium mb-2">Schedule for:</label>
+            <input
+              type="datetime-local"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              className="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-white/30 text-sm"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Footer Actions */}
+      <div className="border-t border-white/10 p-4 flex items-center gap-2">
+        <button
+          title="Attach file"
+          className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+          onClick={() => {
+            // TODO: Implement file upload
+            const input = document.createElement("input")
+            input.type = "file"
+            input.accept = "image/*"
+            input.onchange = (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0]
+              if (file) {
+                // TODO: Upload file and get URL
+                const reader = new FileReader()
+                reader.onload = (e) => {
+                  const url = e.target?.result as string
+                  setMediaUrls([...mediaUrls, url])
+                }
+                reader.readAsDataURL(file)
+              }
+            }
+            input.click()
+          }}
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setShowSchedule(!showSchedule)}
+          title="Schedule message"
+          className={`flex items-center justify-center p-2 rounded-lg transition-colors ${
+            showSchedule ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white"
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={!editor?.getText().trim() || !selectedContactId || isPending}
+          className="ml-auto flex items-center gap-2 px-3 py-2 bg-white hover:bg-white/90 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
+          Send
+        </button>
+      </div>
+    </div>
+  )
+}
+

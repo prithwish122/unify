@@ -1,6 +1,4 @@
 "use client"
-
-import Sidebar from "@/components/dashboard/sidebar"
 import {
   BarChart,
   Bar,
@@ -16,6 +14,7 @@ import {
   Cell,
 } from "recharts"
 import { Download, TrendingUp } from "lucide-react"
+import Sidebar from "@/components/dashboard/sidebar"
 
 export default function AnalyticsDashboard() {
   const responseTimeData = [

@@ -23,6 +23,8 @@ model User {
 
   sessions Session[]
   accounts Account[]
+  notes    Note[]
+  scheduledMessages ScheduledMessage[]
 
   @@map("user")
 }
@@ -81,3 +83,155 @@ enum UserRole {
   EDITOR
   ADMIN
 }
+
+// Unified Message model - normalizes messages across all channels
+model Message {
+  id          String      @id @default(cuid())
+  channel     MessageChannel
+  direction   MessageDirection @default(INBOUND)
+  status      MessageStatus @default(PENDING)
+  threadId    String?     // Groups messages in a conversation thread
+  contactId   String
+  contact     Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  content     String      // Text content
+  htmlContent String?     // Rich HTML content
+  mediaUrls   String[]    // Array of media attachment URLs
+  externalId  String?     // External message ID from provider (e.g., Twilio SID)
+  scheduledFor DateTime?  // For scheduled messages
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  metadata    Json?       // Provider-specific metadata
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([contactId])
+  @@index([threadId])
+  @@index([channel])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("message")
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+  EMAIL
+  TWITTER
+  FACEBOOK
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SCHEDULED
+}
+
+// Contact model - unified contact management
+model Contact {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?
+  phone         String?
+  socialHandles Json?     // { twitter: "@handle", facebook: "handle" }
+  avatar        String?
+  status        ContactStatus @default(UNREAD)
+  lastContactAt DateTime?
+  mergedWithId  String?   // For duplicate detection/merging
+  metadata      Json?     // Additional contact data
+  messages      Message[]
+  notes         Note[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([email])
+  @@index([phone])
+  @@index([status])
+  @@index([mergedWithId])
+  @@map("contact")
+}
+
+enum ContactStatus {
+  UNREAD
+  ACTIVE
+  CLOSED
+}
+
+// Internal Notes model - threaded, with privacy
+model Note {
+  id          String    @id @default(cuid())
+  contactId   String
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  parentId    String?   // For threaded notes
+  parent      Note?     @relation("NoteThread", fields: [parentId], references: [id])
+  replies     Note[]    @relation("NoteThread")
+  content     String    // Rich text content
+  isPrivate   Boolean   @default(false)
+  mentions    String[]  // Array of @mentioned user IDs
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([contactId])
+  @@index([authorId])
+  @@index([parentId])
+  @@map("note")
+}
+
+// Scheduled Message Templates
+model ScheduledMessage {
+  id          String    @id @default(cuid())
+  name        String
+  template    String    // Message template content
+  channel     MessageChannel
+  cronExpression String? // Cron-like expression for recurring
+  nextRunAt   DateTime
+  isActive    Boolean   @default(true)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([nextRunAt])
+  @@index([isActive])
+  @@map("scheduled_message")
+}
+
+// Integration Configurations
+model Integration {
+  id            String    @id @default(cuid())
+  provider      String    // "twilio", "resend", "twitter", etc.
+  config        Json      // Provider-specific configuration
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([provider])
+  @@map("integration")
+}
+
+// Twilio Phone Numbers
+model TwilioNumber {
+  id            String    @id @default(cuid())
+  phoneNumber   String    @unique
+  friendlyName String?
+  sid           String    @unique // Twilio SID
+  status        String    // "active", "inactive"
+  capabilities  Json?     // { voice: true, sms: true, whatsapp: true }
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("twilio_number")
+}
+
+// Note: User model already defined above with relations to Session, Account
+// Add additional relations here

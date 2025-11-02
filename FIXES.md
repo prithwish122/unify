@@ -1,45 +1,70 @@
-# Fixes Applied
+# Quick Fixes for Common Issues
 
-## Prisma Client Initialization Error
+## 1. Fix Tiptap SSR Error ✅
 
-**Problem**: `@prisma/client did not initialize yet` error when starting the dev server.
+The Tiptap editor needs `immediatelyRender: false` to avoid SSR hydration errors. This has been fixed in `composer-panel-enhanced.tsx`.
 
-**Root Cause**: 
-- Next.js was trying to import Prisma Client before it was generated
-- Lazy-loading approach wasn't working with Better Auth's immediate evaluation
-- Next.js cache was holding onto old module state
+## 2. Fix Database Table Error (P2021) ✅
 
-**Solutions Applied**:
+The error `P2021` means the database table doesn't exist yet. You need to push the schema:
 
-1. **Fixed Prisma Client initialization** (`lib/auth.ts`):
-   - Removed lazy-loading function approach
-   - Directly initialize Prisma Client at module level
-   - Added error handling with helpful message
+```bash
+npm run db:push
+```
 
-2. **Updated dev script** (`package.json`):
-   - Added `npx prisma generate` before `next dev` to ensure Prisma Client is always generated
-   - This ensures Prisma Client exists before Next.js tries to import it
+This will create all the tables (Contact, Message, Note, etc.).
 
-3. **Cleared Next.js cache**:
-   - Removed `.next` directory to clear cached modules
-   - This ensures fresh imports of Prisma Client
+## 3. Set User as Admin ✅
 
-4. **Verified Prisma Client generation**:
-   - Confirmed Prisma Client files exist in `node_modules/.prisma/client/`
-   - Tested Prisma Client initialization directly
+Use the new script to set yourself as admin:
 
-## Next Steps
+```bash
+# Set a specific user as admin
+npm run set-admin your@email.com
 
-1. **Stop the current dev server** (if running)
-2. **Restart with**: `npm run dev`
-3. The dev script will now automatically generate Prisma Client before starting
+# Or set it directly in the script
+```
 
-## If Error Persists
+The script will:
+- Find your user by email
+- Set role to ADMIN
+- Show confirmation
 
-1. Manually run: `npm run db:generate`
-2. Clear cache: Delete `.next` folder
-3. Restart: `npm run dev`
+## Quick Fix Steps
 
-The error should now be resolved! 🎉
+1. **Push database schema:**
+   ```bash
+   npm run db:push
+   ```
 
+2. **Set yourself as admin:**
+   ```bash
+   npm run set-admin your@email.com
+   ```
 
+3. **Restart dev server:**
+   ```bash
+   npm run dev
+   ```
+
+## Alternative: Set Admin via Database
+
+If you prefer to do it manually:
+
+```bash
+npm run db:studio
+```
+
+Then:
+1. Open Prisma Studio
+2. Navigate to User table
+3. Find your user
+4. Change `role` from `VIEWER` to `ADMIN`
+5. Save
+
+## All Fixed! ✅
+
+After running these fixes:
+- ✅ Tiptap composer will work without SSR errors
+- ✅ Contacts API will work (once tables exist)
+- ✅ You'll have ADMIN access to Twilio settings
