@@ -2,6 +2,10 @@
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
+    
+  },
+  experimental: {
+    optimizeCss: false, // disables LightningCSS
   },
   images: {
     unoptimized: true,

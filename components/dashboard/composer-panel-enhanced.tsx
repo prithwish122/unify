@@ -22,6 +22,8 @@ interface ComposerPanelProps {
 export default function ComposerPanelEnhanced({ onClose, contactId: initialContactId, channel: initialChannel }: ComposerPanelProps) {
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>(initialChannel || "WHATSAPP")
   const [selectedContactId, setSelectedContactId] = useState<string | undefined>(initialContactId)
+  const [directPhoneNumber, setDirectPhoneNumber] = useState<string>("")
+  const [useDirectPhone, setUseDirectPhone] = useState<boolean>(false)
   const [showSchedule, setShowSchedule] = useState(false)
   const [scheduleTime, setScheduleTime] = useState("")
   const [mediaUrls, setMediaUrls] = useState<string[]>([])
@@ -53,16 +55,68 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
   ]
 
   const handleSend = async () => {
-    if (!editor || !selectedContactId) return
+    if (!editor) return
 
     const content = editor.getText()
     const htmlContent = editor.getHTML()
 
     if (!content.trim()) return
 
+    // Determine recipient: either selected contact or direct phone number
+    let finalContactId: string | undefined = selectedContactId
+
+    // If using direct phone number, create or find contact
+    if (useDirectPhone && directPhoneNumber.trim()) {
+      const phoneNumber = directPhoneNumber.trim().startsWith("+") 
+        ? directPhoneNumber.trim() 
+        : `+${directPhoneNumber.trim()}`
+
+      try {
+        // Try to find existing contact by phone
+        const contacts = contactsData?.contacts || []
+        const existingContact = contacts.find((c: any) => {
+          const contactPhone = c.phone || ""
+          return contactPhone === phoneNumber || 
+                 contactPhone.replace(/^\+/, "") === phoneNumber.replace(/^\+/, "")
+        })
+
+        if (existingContact) {
+          finalContactId = existingContact.id
+        } else {
+          // Create new contact with phone number
+          await new Promise<void>((resolve, reject) => {
+            upsertContact(
+              {
+                phone: phoneNumber,
+                name: phoneNumber, // Use phone as name if no name provided
+              },
+              {
+                onSuccess: (data: any) => {
+                  finalContactId = data?.contact?.id || data?.contact?.id || data?.id
+                  resolve()
+                },
+                onError: (error) => {
+                  reject(error)
+                },
+              },
+            )
+          })
+        }
+      } catch (error) {
+        console.error("Error creating/finding contact:", error)
+        alert(error instanceof Error ? error.message : "Failed to create contact")
+        return
+      }
+    }
+
+    if (!finalContactId) {
+      alert("Please select a contact or enter a phone number")
+      return
+    }
+
     sendMessage(
       {
-        contactId: selectedContactId,
+        contactId: finalContactId,
         channel: selectedChannel,
         content: content.trim(),
         htmlContent: htmlContent !== "<p></p>" && htmlContent.trim() ? htmlContent : undefined,
@@ -75,6 +129,8 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
           setMediaUrls([])
           setScheduleTime("")
           setShowSchedule(false)
+          setDirectPhoneNumber("")
+          setUseDirectPhone(false)
           // Show success message
           alert("Message sent successfully!")
           onClose()
@@ -108,19 +164,53 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
         {/* Contact Selection */}
         <div>
           <label className="block text-white/70 text-xs font-medium mb-2">To:</label>
-          <div className="flex gap-2">
-            <select
-              value={selectedContactId || ""}
-              onChange={(e) => setSelectedContactId(e.target.value || undefined)}
-              className="flex-1 bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-            >
-              <option value="">Select contact...</option>
-              {contacts.map((contact: any) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.name || contact.email || contact.phone || contact.id}
-                </option>
-              ))}
-            </select>
+          <div className="flex gap-2 mb-2">
+            {!useDirectPhone ? (
+              <>
+                <select
+                  value={selectedContactId || ""}
+                  onChange={(e) => {
+                    setSelectedContactId(e.target.value || undefined)
+                    setUseDirectPhone(false)
+                  }}
+                  className="flex-1 bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                >
+                  <option value="">Select contact...</option>
+                  {contacts.map((contact: any) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name || contact.email || contact.phone || contact.id}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setUseDirectPhone(true)}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-colors"
+                  title="Enter phone number directly"
+                >
+                  📱
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="tel"
+                  value={directPhoneNumber}
+                  onChange={(e) => setDirectPhoneNumber(e.target.value)}
+                  placeholder="+919674155763"
+                  className="flex-1 bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+                <button
+                  onClick={() => {
+                    setUseDirectPhone(false)
+                    setDirectPhoneNumber("")
+                  }}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-colors"
+                  title="Use contact list"
+                >
+                  ←
+                </button>
+              </>
+            )}
             <button
               onClick={() => setShowCreateContact(!showCreateContact)}
               className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-colors"
@@ -284,7 +374,7 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
         </button>
         <button
           onClick={handleSend}
-          disabled={!editor?.getText().trim() || !selectedContactId || isPending}
+          disabled={!editor?.getText().trim() || (!selectedContactId && (!useDirectPhone || !directPhoneNumber.trim())) || isPending}
           className="ml-auto flex items-center gap-2 px-3 py-2 bg-white hover:bg-white/90 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isPending ? (
