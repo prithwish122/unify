@@ -11,8 +11,10 @@ import { useAuth } from "@/hooks/use-auth"
 import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
-  const [selectedContact, setSelectedContact] = useState(null)
+  const [selectedContact, setSelectedContact] = useState<any>(null)
   const [showComposer, setShowComposer] = useState(false)
+  const [composerContactId, setComposerContactId] = useState<string | undefined>(undefined)
+  const [composerChannel, setComposerChannel] = useState<any>(undefined)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterChannel, setFilterChannel] = useState("all")
   const { isAuthenticated, isLoading } = useAuth()
@@ -26,6 +28,20 @@ export default function DashboardPage() {
       // User just logged in, refresh the page state
     }
   }, [isAuthenticated])
+
+  // Listen for openComposer event from contact modal
+  useEffect(() => {
+    const handleOpenComposer = (event: CustomEvent) => {
+      setComposerContactId(event.detail?.contactId)
+      setComposerChannel(event.detail?.channel)
+      setShowComposer(true)
+    }
+
+    window.addEventListener("openComposer", handleOpenComposer as EventListener)
+    return () => {
+      window.removeEventListener("openComposer", handleOpenComposer as EventListener)
+    }
+  }, [])
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -77,9 +93,13 @@ export default function DashboardPage() {
           {showComposer && (
             <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] shadow-lg">
               <ComposerPanelEnhanced
-                onClose={() => setShowComposer(false)}
-                contactId={selectedContact?.id}
-                channel={selectedContact?.channel?.toUpperCase() as any}
+                onClose={() => {
+                  setShowComposer(false)
+                  setComposerContactId(undefined)
+                  setComposerChannel(undefined)
+                }}
+                contactId={composerContactId || selectedContact?.id}
+                channel={(composerChannel || selectedContact?.channel)?.toUpperCase() as any}
               />
             </div>
           )}

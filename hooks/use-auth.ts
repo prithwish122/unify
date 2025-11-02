@@ -8,7 +8,7 @@ import { useEffect, useState } from "react"
  * Provides user session, loading state, and auth methods
  */
 export function useAuth() {
-  const { data: session, isPending, error } = useSession()
+  const { data: session, isPending, error, refetch } = useSession()
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -17,6 +17,12 @@ export function useAuth() {
     }
   }, [isPending])
 
+  const refreshSession = async () => {
+    // Reload the page to get the updated session from the server
+    // This ensures the user role change is reflected immediately
+    window.location.reload()
+  }
+
   return {
     user: session?.user || null,
     session,
@@ -24,6 +30,7 @@ export function useAuth() {
     isAuthenticated: !!session?.user,
     error,
     signOut: () => authClient.signOut(),
+    refreshSession,
   }
 }
 

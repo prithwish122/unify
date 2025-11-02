@@ -10,7 +10,7 @@ import { X, Send, Paperclip, Clock, Loader2 } from "lucide-react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { useSendMessage } from "@/hooks/use-messages"
-import { useContacts } from "@/hooks/use-contacts"
+import { useContacts, useUpsertContact } from "@/hooks/use-contacts"
 import type { MessageChannel } from "@/types/message"
 
 interface ComposerPanelProps {
@@ -28,6 +28,11 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
 
   const { mutate: sendMessage, isPending } = useSendMessage()
   const { data: contactsData } = useContacts({ limit: 50 })
+  const { mutate: upsertContact } = useUpsertContact()
+  const [showCreateContact, setShowCreateContact] = useState(false)
+  const [newContactName, setNewContactName] = useState("")
+  const [newContactEmail, setNewContactEmail] = useState("")
+  const [newContactPhone, setNewContactPhone] = useState("")
 
   // Tiptap editor
   const editor = useEditor({
@@ -59,9 +64,9 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
       {
         contactId: selectedContactId,
         channel: selectedChannel,
-        content,
-        htmlContent: htmlContent !== "<p></p>" ? htmlContent : undefined,
-        mediaUrls,
+        content: content.trim(),
+        htmlContent: htmlContent !== "<p></p>" && htmlContent.trim() ? htmlContent : undefined,
+        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
         scheduledFor: showSchedule && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
       },
       {
@@ -70,11 +75,14 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
           setMediaUrls([])
           setScheduleTime("")
           setShowSchedule(false)
+          // Show success message
+          alert("Message sent successfully!")
           onClose()
         },
         onError: (error) => {
           console.error("Send message error:", error)
-          alert(error instanceof Error ? error.message : "Failed to send message")
+          const errorMessage = error instanceof Error ? error.message : "Failed to send message"
+          alert(`Error: ${errorMessage}`)
         },
       },
     )
@@ -100,18 +108,82 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
         {/* Contact Selection */}
         <div>
           <label className="block text-white/70 text-xs font-medium mb-2">To:</label>
-          <select
-            value={selectedContactId || ""}
-            onChange={(e) => setSelectedContactId(e.target.value || undefined)}
-            className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-          >
-            <option value="">Select contact...</option>
-            {contacts.map((contact: any) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.name || contact.email || contact.phone || contact.id}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              value={selectedContactId || ""}
+              onChange={(e) => setSelectedContactId(e.target.value || undefined)}
+              className="flex-1 bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+            >
+              <option value="">Select contact...</option>
+              {contacts.map((contact: any) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.name || contact.email || contact.phone || contact.id}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowCreateContact(!showCreateContact)}
+              className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-colors"
+              title="Create new contact"
+            >
+              +
+            </button>
+          </div>
+          {showCreateContact && (
+            <div className="mt-2 p-3 bg-white/5 rounded-lg space-y-2 border border-white/10">
+              <input
+                type="text"
+                placeholder="Name"
+                value={newContactName}
+                onChange={(e) => setNewContactName(e.target.value)}
+                className="w-full bg-white/10 border border-white/20 rounded p-2 text-white text-xs placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={newContactEmail}
+                onChange={(e) => setNewContactEmail(e.target.value)}
+                className="w-full bg-white/10 border border-white/20 rounded p-2 text-white text-xs placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+              />
+              <input
+                type="tel"
+                placeholder="Phone (+1234567890)"
+                value={newContactPhone}
+                onChange={(e) => setNewContactPhone(e.target.value)}
+                className="w-full bg-white/10 border border-white/20 rounded p-2 text-white text-xs placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+              />
+              <button
+                onClick={async () => {
+                  if (!newContactName && !newContactEmail && !newContactPhone) {
+                    alert("Please enter at least name, email, or phone")
+                    return
+                  }
+                  upsertContact(
+                    {
+                      name: newContactName || undefined,
+                      email: newContactEmail || undefined,
+                      phone: newContactPhone || undefined,
+                    },
+                    {
+                      onSuccess: (data) => {
+                        setSelectedContactId(data.contact?.id || data.contact.id)
+                        setShowCreateContact(false)
+                        setNewContactName("")
+                        setNewContactEmail("")
+                        setNewContactPhone("")
+                      },
+                      onError: (error) => {
+                        alert(error instanceof Error ? error.message : "Failed to create contact")
+                      },
+                    },
+                  )
+                }}
+                className="w-full px-3 py-2 bg-white hover:bg-white/90 text-black font-semibold rounded text-xs transition-colors"
+              >
+                Create Contact
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Channel Selector */}
@@ -132,9 +204,16 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
         </div>
 
         {/* Rich Text Editor */}
-        <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px]">
-          <EditorContent editor={editor} />
-        </div>
+        {editor && (
+          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px] overflow-auto">
+            <EditorContent editor={editor} />
+          </div>
+        )}
+        {!editor && (
+          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px] flex items-center justify-center text-white/50 text-sm">
+            Loading editor...
+          </div>
+        )}
 
         {/* Media Attachments */}
         {mediaUrls.length > 0 && (

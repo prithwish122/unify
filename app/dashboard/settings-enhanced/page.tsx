@@ -6,14 +6,14 @@
 
 import { useState } from "react"
 import Sidebar from "@/components/dashboard/sidebar"
-import { Save, ShoppingCart, Plus, Copy, Check, Loader2 } from "lucide-react"
+import { Save, ShoppingCart, Plus, Copy, Check, Loader2, RefreshCw } from "lucide-react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/use-auth"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("account")
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const { user } = useAuth()
+  const { user, refreshSession } = useAuth()
   const queryClient = useQueryClient()
 
   // Fetch Twilio numbers
@@ -184,9 +184,19 @@ export default function SettingsPage() {
                   {/* Setup Form */}
                   {!isAdmin && (
                     <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
-                      <p className="text-white/70 text-sm">
+                      <p className="text-white/70 text-sm mb-4">
                         Admin access required to manage Twilio integration
                       </p>
+                      <p className="text-white/50 text-xs mb-4">
+                        If you just set yourself as admin, please refresh your session.
+                      </p>
+                      <button
+                        onClick={refreshSession}
+                        className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Refresh Session
+                      </button>
                     </div>
                   )}
 
