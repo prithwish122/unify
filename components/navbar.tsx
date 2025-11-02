@@ -42,7 +42,7 @@ export default function Navbar() {
             </div>
 
             <button className="hidden md:block bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors duration-300 text-sm">
-              Try demo
+              <a href="/dashboard">Try demo</a>
             </button>
 
             {/* Mobile Menu Button */}
