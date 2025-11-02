@@ -7,7 +7,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
-    <nav className="relative w-1/2 mx-auto px-6 mt-8">
+    <nav className="relative w-1/2 mx-auto px-6 mt-8 z-50">
       <div className="max-w-7xl mx-auto">
         <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-full px-6 py-3 shadow-2xl">
           <div className="flex items-center justify-between">
@@ -41,9 +41,12 @@ export default function Navbar() {
               </Link>
             </div>
 
-            <button className="hidden md:block bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors duration-300 text-sm">
-              <a href="/dashboard">Try demo</a>
-            </button>
+            <Link
+              href="/dashboard"
+              className="hidden md:block bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors duration-300 text-sm cursor-pointer z-10 relative"
+            >
+              Try demo
+            </Link>
 
             {/* Mobile Menu Button */}
             <button onClick={() => setIsOpen(!isOpen)} className="md:hidden text-white">
@@ -65,9 +68,12 @@ export default function Navbar() {
               <Link href="#" className="block text-white/80 hover:text-white py-2 text-sm">
                 Contact
               </Link>
-              <button className="w-full bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors mt-4 text-sm">
-                Connect Wallet
-              </button>
+              <Link
+                href="/dashboard"
+                className="block w-full bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors mt-4 text-sm text-center"
+              >
+                Try demo
+              </Link>
             </div>
           )}
         </div>

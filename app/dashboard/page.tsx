@@ -6,12 +6,14 @@ import KanbanBoard from "@/components/dashboard/kanban-board"
 import ContactModal from "@/components/dashboard/contact-modal"
 import ComposerPanel from "@/components/dashboard/composer-panel"
 import SearchBar from "@/components/dashboard/search-bar"
+import LoginModal from "@/components/dashboard/login-modal"
 
 export default function DashboardPage() {
   const [selectedContact, setSelectedContact] = useState(null)
   const [showComposer, setShowComposer] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterChannel, setFilterChannel] = useState("all")
+  const [showLoginModal, setShowLoginModal] = useState(true)
 
   return (
     <main className="min-h-screen">
@@ -53,6 +55,9 @@ export default function DashboardPage() {
 
       {/* Contact Profile Modal */}
       {selectedContact && <ContactModal contact={selectedContact} onClose={() => setSelectedContact(null)} />}
+
+      {/* Login Modal */}
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </main>
   )
 }
