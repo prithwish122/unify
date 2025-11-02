@@ -63,14 +63,24 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
 
   const handleQuickAction = async (action: "call" | "reply") => {
     if (action === "reply") {
-      // Open composer with this contact
+      // Close modal and trigger composer - we'll use a custom event
       onClose()
-      // Trigger composer open - you'll need to pass a callback or use state management
-      // For now, we'll just show an alert
-      alert("Reply functionality - open composer with this contact")
+      // Dispatch custom event to open composer
+      window.dispatchEvent(
+        new CustomEvent("openComposer", {
+          detail: {
+            contactId: contact.id,
+            channel: contact.channel,
+          },
+        }),
+      )
     } else if (action === "call") {
       // TODO: Implement calling functionality
-      alert("Calling functionality - integrate Twilio Voice API")
+      if (fullContact?.phone) {
+        window.location.href = `tel:${fullContact.phone}`
+      } else {
+        alert("No phone number available for this contact")
+      }
     }
   }
 

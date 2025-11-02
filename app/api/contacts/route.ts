@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
 import { auth } from "@/lib/auth"
+import { CreateContactSchema, QueryParamsSchema } from "@/lib/validations"
+import { autoDetectDuplicates } from "@/lib/contact-utils"
 
 const prisma = new PrismaClient()
 
@@ -19,10 +21,23 @@ export async function GET(req: NextRequest) {
     }
 
     const searchParams = req.nextUrl.searchParams
-    const status = searchParams.get("status")
-    const search = searchParams.get("search")
-    const limit = parseInt(searchParams.get("limit") || "50", 10)
-    const offset = parseInt(searchParams.get("offset") || "0", 10)
+    const params = {
+      status: searchParams.get("status") || undefined,
+      search: searchParams.get("search") || undefined,
+      limit: searchParams.get("limit") || "50",
+      offset: searchParams.get("offset") || "0",
+    }
+
+    // Validate query parameters
+    const validation = QueryParamsSchema.safeParse(params)
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid query parameters", details: validation.error.errors },
+        { status: 400 },
+      )
+    }
+
+    const { status, search, limit, offset } = validation.data
 
     const where: any = {}
 
@@ -47,6 +62,12 @@ export async function GET(req: NextRequest) {
         prisma.contact.findMany({
           where,
           include: {
+            messages: {
+              orderBy: {
+                createdAt: "desc",
+              },
+              take: 1, // Only include latest message for kanban board
+            },
             _count: {
               select: {
                 messages: true,
@@ -101,9 +122,19 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, email, phone, socialHandles, avatar } = body
 
-    // Check for duplicate
+    // Validate request body
+    const validation = CreateContactSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid contact data", details: validation.error.errors },
+        { status: 400 },
+      )
+    }
+
+    const { name, email, phone, socialHandles, avatar } = validation.data
+
+    // Check for exact duplicate
     let contact
     if (email) {
       contact = await prisma.contact.findUnique({
@@ -131,6 +162,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ contact, created: false })
     }
 
+    // Check for potential duplicates using fuzzy matching
+    const duplicates = await autoDetectDuplicates({ name, email, phone })
+    
     // Create new contact
     contact = await prisma.contact.create({
       data: {
@@ -143,7 +177,14 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ contact, created: true }, { status: 201 })
+    return NextResponse.json(
+      {
+        contact,
+        created: true,
+        duplicates: duplicates.length > 0 ? duplicates.slice(0, 5) : [], // Return top 5 potential duplicates
+      },
+      { status: 201 },
+    )
   } catch (error) {
     console.error("Create contact error:", error)
     return NextResponse.json(

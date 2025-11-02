@@ -59,7 +59,8 @@ export default function KanbanBoardEnhanced({ onContactClick, searchQuery, filte
 
   // Update cards when contacts data changes
   useEffect(() => {
-    if (contacts.length > 0) {
+    // Always update cards, even if contacts array is empty
+    if (contacts) {
       const organized: { [key: string]: ContactType[] } = {
         unread: [],
         active: [],
@@ -67,12 +68,17 @@ export default function KanbanBoardEnhanced({ onContactClick, searchQuery, filte
       }
 
       contacts.forEach((contact: any) => {
+        // Skip contacts that are merged
+        if (contact.mergedWithId) return
+
         // Get last message
         const lastMessage = contact.messages?.[0] || null
         const lastMessageText = lastMessage?.content || "No messages yet"
 
-        // Get timestamp
-        const lastContactAt = contact.lastContactAt ? new Date(contact.lastContactAt) : new Date()
+        // Get timestamp - use createdAt if lastContactAt is not available
+        const lastContactAt = contact.lastContactAt 
+          ? new Date(contact.lastContactAt) 
+          : (contact.createdAt ? new Date(contact.createdAt) : new Date())
         const timestamp = formatDistanceToNow(lastContactAt, { addSuffix: true })
 
         // Get channel from last message or default
@@ -105,6 +111,13 @@ export default function KanbanBoardEnhanced({ onContactClick, searchQuery, filte
       })
 
       setCards(organized)
+    } else {
+      // Reset cards if no contacts
+      setCards({
+        unread: [],
+        active: [],
+        closed: [],
+      })
     }
   }, [contacts, searchQuery, filterChannel])
 
@@ -184,24 +197,37 @@ export default function KanbanBoardEnhanced({ onContactClick, searchQuery, filte
     )
   }
 
+  // Check if all columns are empty
+  const totalCards = cards.unread.length + cards.active.length + cards.closed.length
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {columns.map((column) => (
-        <KanbanColumn
-          key={column.key}
-          title={column.title}
-          cards={cards[column.key]}
-          columnKey={column.key}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onCardClick={onContactClick}
-          color={column.color}
-          searchQuery={searchQuery}
-          filterChannel={filterChannel}
-        />
-      ))}
-    </div>
+    <>
+      {totalCards === 0 && !isLoading ? (
+        <div className="flex flex-col items-center justify-center h-64 text-white/50">
+          <div className="text-6xl mb-4 opacity-50">📭</div>
+          <p className="text-lg mb-2">No conversations yet</p>
+          <p className="text-sm opacity-70">Send a message to get started!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {columns.map((column) => (
+            <KanbanColumn
+              key={column.key}
+              title={column.title}
+              cards={cards[column.key]}
+              columnKey={column.key}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onCardClick={onContactClick}
+              color={column.color}
+              searchQuery={searchQuery}
+              filterChannel={filterChannel}
+            />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

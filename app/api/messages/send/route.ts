@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
 import { sendMessage } from "@/lib/integrations"
 import { auth } from "@/lib/auth"
+import { SendMessageSchema } from "@/lib/validations"
 
 const prisma = new PrismaClient()
 
@@ -19,14 +20,17 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { contactId, channel, content, htmlContent, mediaUrls, scheduledFor } = body
 
-    if (!contactId || !channel || !content) {
+    // Validate request body
+    const validation = SendMessageSchema.safeParse(body)
+    if (!validation.success) {
       return NextResponse.json(
-        { error: "Missing required fields: contactId, channel, content" },
+        { error: "Invalid message data", details: validation.error.errors },
         { status: 400 },
       )
     }
+
+    const { contactId, channel, content, htmlContent, mediaUrls, scheduledFor } = validation.data
 
     // Get contact
     const contact = await prisma.contact.findUnique({
@@ -84,12 +88,20 @@ export async function POST(req: NextRequest) {
 
     // Send immediately
     try {
+      // Map channel to lowercase for integration
+      const channelMap: Record<string, string> = {
+        SMS: "sms",
+        WHATSAPP: "whatsapp",
+        EMAIL: "email",
+      }
+      const integrationChannel = channelMap[channel] || channel.toLowerCase()
+
       const result = await sendMessage({
         to,
         content,
         htmlContent,
         mediaUrls: mediaUrls || [],
-        channel: channel.toLowerCase() as any,
+        channel: integrationChannel as any,
       })
 
       // Create message record

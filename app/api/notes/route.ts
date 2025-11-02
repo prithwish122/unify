@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
 import { auth } from "@/lib/auth"
+import { CreateNoteSchema } from "@/lib/validations"
 
 const prisma = new PrismaClient()
 
@@ -83,11 +84,17 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { contactId, content, isPrivate, parentId, mentions } = body
 
-    if (!contactId || !content) {
-      return NextResponse.json({ error: "contactId and content are required" }, { status: 400 })
+    // Validate request body
+    const validation = CreateNoteSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid note data", details: validation.error.errors },
+        { status: 400 },
+      )
     }
+
+    const { contactId, content, isPrivate, parentId, mentions } = validation.data
 
     // Verify contact exists
     const contact = await prisma.contact.findUnique({

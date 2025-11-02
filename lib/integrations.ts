@@ -114,21 +114,56 @@ class TwilioSender implements MessageSender {
  */
 class EmailSender implements MessageSender {
   private apiKey?: string
+  private fromEmail?: string
 
-  constructor(config?: { apiKey: string }) {
+  constructor(config?: { apiKey: string; fromEmail?: string }) {
     this.apiKey = config?.apiKey
+    this.fromEmail = config?.fromEmail || process.env.RESEND_FROM_EMAIL || "noreply@example.com"
   }
 
   async send(payload: SendMessagePayload): Promise<{ messageId: string; externalId?: string }> {
     if (!this.apiKey) {
-      throw new Error("Resend API key not configured")
+      throw new Error("Resend API key not configured. Set RESEND_API_KEY environment variable or configure in database.")
     }
 
-    // TODO: Implement Resend API integration
-    // For now, return a mock response
-    return {
-      messageId: `email_${Date.now()}`,
-      externalId: undefined,
+    try {
+      // Dynamically import Resend to avoid errors if not installed
+      const { Resend } = await import("resend")
+      const resend = new Resend(this.apiKey)
+
+      const { to, content, htmlContent } = payload
+
+      const emailData: any = {
+        from: this.fromEmail,
+        to: [to],
+        subject: "Message from Unified Inbox",
+        text: content,
+      }
+
+      // Use HTML content if available
+      if (htmlContent) {
+        emailData.html = htmlContent
+      } else {
+        // Convert plain text to HTML
+        emailData.html = content.replace(/\n/g, "<br>")
+      }
+
+      const result = await resend.emails.send(emailData)
+
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to send email")
+      }
+
+      return {
+        messageId: result.data?.id || `email_${Date.now()}`,
+        externalId: result.data?.id,
+      }
+    } catch (error) {
+      // If Resend is not installed, provide helpful error
+      if (error instanceof Error && error.message.includes("Cannot find module")) {
+        throw new Error("Resend package not installed. Run: npm install resend")
+      }
+      throw error
     }
   }
 }
@@ -188,11 +223,28 @@ export async function createSender(channel: ChannelType): Promise<MessageSender>
   }
 
   if (channel === "email") {
+    // First try database integration config
     const integration = await prisma.integration.findUnique({
       where: { provider: "email" },
     })
-    const config = integration?.config as { apiKey?: string } | undefined
-    return new EmailSender(config)
+    
+    if (integration && integration.isActive) {
+      const config = integration.config as { apiKey?: string; fromEmail?: string } | undefined
+      if (config?.apiKey) {
+        return new EmailSender(config)
+      }
+    }
+
+    // Fallback to environment variables
+    const apiKey = process.env.RESEND_API_KEY
+    const fromEmail = process.env.RESEND_FROM_EMAIL
+
+    if (apiKey) {
+      return new EmailSender({ apiKey, fromEmail })
+    }
+
+    // Return sender even without API key (will throw error when sending)
+    return new EmailSender()
   }
 
   // Twitter and Facebook - TODO: Implement OAuth and API integrations

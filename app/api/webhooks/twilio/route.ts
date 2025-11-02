@@ -8,7 +8,16 @@ import { PrismaClient } from "@prisma/client"
 import { sendMessage } from "@/lib/integrations"
 import twilio from "twilio"
 
-const prisma = new PrismaClient()
+// Use singleton pattern for Prisma Client to avoid connection pool exhaustion in serverless
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+const prisma = globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma
+}
 
 // Verify Twilio webhook signature (optional but recommended)
 function verifyTwilioSignature(req: NextRequest): boolean {
@@ -58,12 +67,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Extract phone number (remove whatsapp: prefix if present)
-    const phoneNumber = from?.toString().replace(/^whatsapp:/, "").replace(/^\+/, "")
+    // Extract phone number (remove whatsapp: prefix if present, but keep +)
+    // WhatsApp format: whatsapp:+1234567890
+    // We need: +1234567890 for database storage
+    let phoneNumber = from?.toString() || ""
+    phoneNumber = phoneNumber.replace(/^whatsapp:/, "") // Remove whatsapp: prefix
+    // Ensure phone number starts with + for consistency
+    if (phoneNumber && !phoneNumber.startsWith("+")) {
+      phoneNumber = `+${phoneNumber}`
+    }
 
     // Find or create contact
+    // Try to find by phone number (with or without +)
     let contact = await prisma.contact.findFirst({
-      where: { phone: phoneNumber },
+      where: {
+        OR: [
+          { phone: phoneNumber },
+          { phone: phoneNumber.replace(/^\+/, "") }, // Try without +
+          { phone: `+${phoneNumber}` }, // Try with +
+        ],
+      },
     })
 
     if (!contact) {
@@ -76,6 +99,13 @@ export async function POST(req: NextRequest) {
         },
       })
     } else {
+      // Update phone number if format changed (normalize to + format)
+      if (contact.phone !== phoneNumber) {
+        await prisma.contact.update({
+          where: { id: contact.id },
+          data: { phone: phoneNumber },
+        })
+      }
       // Update last contact time
       await prisma.contact.update({
         where: { id: contact.id },

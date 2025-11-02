@@ -63,6 +63,9 @@ export function useSendMessage() {
       queryClient.invalidateQueries({ queryKey: ["messages"] })
       queryClient.invalidateQueries({ queryKey: ["contacts", variables.contactId] })
       queryClient.invalidateQueries({ queryKey: ["contacts"] })
+      // Force refetch to update UI immediately
+      queryClient.refetchQueries({ queryKey: ["contacts"] })
+      queryClient.refetchQueries({ queryKey: ["messages"] })
     },
   })
 }
