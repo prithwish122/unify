@@ -16,7 +16,7 @@ export default function Navbar() {
               <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
                 <span className="text-black font-bold text-sm">⚡</span>
               </div>
-              <span className="text-white font-semibold text-lg">ChainZap</span>
+              <span className="text-white font-semibold text-lg">Unify</span>
             </div>
 
             {/* Navigation Links */}
@@ -42,7 +42,7 @@ export default function Navbar() {
             </div>
 
             <button className="hidden md:block bg-black hover:bg-black/80 text-white font-semibold px-6 py-2 rounded-full transition-colors duration-300 text-sm">
-              Connect Wallet
+              Try demo
             </button>
 
             {/* Mobile Menu Button */}
