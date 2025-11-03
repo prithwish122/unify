@@ -191,14 +191,21 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                       {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                         <div className="mt-2 space-y-1">
-                          {msg.mediaUrls.map((url: string, idx: number) => (
-                            <img
-                              key={idx}
-                              src={url}
-                              alt={`Attachment ${idx + 1}`}
-                              className="max-w-full h-auto rounded"
-                            />
-                          ))}
+                          {msg.mediaUrls.map((url: string, idx: number) => {
+                            const proxied = url.includes("api.twilio.com")
+                              ? `/api/media/proxy?url=${encodeURIComponent(url)}`
+                              : url
+                            return (
+                              <img
+                                key={idx}
+                                src={proxied}
+                                alt={`Attachment ${idx + 1}`}
+                                className="max-w-full h-auto rounded"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            )
+                          })}
                         </div>
                       )}
                       <p className="text-xs text-white/50 mt-1">

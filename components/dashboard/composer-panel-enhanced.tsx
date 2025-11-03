@@ -147,7 +147,7 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
   const contacts = contactsData?.contacts || []
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl flex flex-col h-full overflow-hidden w-96">
+    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl flex flex-col h-full overflow-hidden w-[680px] max-w-[90vw]">
       {/* Header */}
       <div className="flex items-center justify-between p-5 border-b border-white/10">
         <h3 className="text-white font-semibold">Compose Message</h3>
@@ -295,12 +295,12 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
 
         {/* Rich Text Editor */}
         {editor && (
-          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px] overflow-auto">
+          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[220px] overflow-auto">
             <EditorContent editor={editor} />
           </div>
         )}
         {!editor && (
-          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[150px] flex items-center justify-center text-white/50 text-sm">
+          <div className="bg-white/10 border border-white/20 rounded-lg min-h-[220px] flex items-center justify-center text-white/50 text-sm">
             Loading editor...
           </div>
         )}
@@ -310,7 +310,7 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
           <div className="flex flex-wrap gap-2">
             {mediaUrls.map((url, index) => (
               <div key={index} className="relative">
-                <img src={url} alt={`Attachment ${index + 1}`} className="w-16 h-16 object-cover rounded" />
+                <img src={url} alt={`Attachment ${index + 1}`} className="w-20 h-20 object-cover rounded" loading="lazy" decoding="async" />
                 <button
                   onClick={() => setMediaUrls(mediaUrls.filter((_, i) => i !== index))}
                   className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
@@ -342,20 +342,21 @@ export default function ComposerPanelEnhanced({ onClose, contactId: initialConta
           title="Attach file"
           className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
           onClick={() => {
-            // TODO: Implement file upload
             const input = document.createElement("input")
             input.type = "file"
             input.accept = "image/*"
-            input.onchange = (e) => {
+            input.onchange = async (e) => {
               const file = (e.target as HTMLInputElement).files?.[0]
-              if (file) {
-                // TODO: Upload file and get URL
-                const reader = new FileReader()
-                reader.onload = (e) => {
-                  const url = e.target?.result as string
-                  setMediaUrls([...mediaUrls, url])
-                }
-                reader.readAsDataURL(file)
+              if (!file) return
+              try {
+                const formData = new FormData()
+                formData.append("file", file)
+                const res = await fetch("/api/upload", { method: "POST", body: formData })
+                const json = await res.json()
+                if (!res.ok) throw new Error(json?.error || "Upload failed")
+                setMediaUrls([...mediaUrls, json.url])
+              } catch (err: any) {
+                alert(err?.message || "Failed to upload media. Configure Cloudinary env vars to enable uploads.")
               }
             }
             input.click()

@@ -91,7 +91,7 @@ export default function DashboardPage() {
           </div>
 
           {showComposer && (
-            <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] shadow-lg">
+            <div className="fixed bottom-6 right-6 z-40 w-[680px] max-w-[90vw] max-h-[75vh] shadow-lg">
               <ComposerPanelEnhanced
                 onClose={() => {
                   setShowComposer(false)

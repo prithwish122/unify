@@ -63,6 +63,15 @@ export async function GET(req: NextRequest) {
       },
     })
 
+    // Message volume per day (trend)
+    const messageVolumeDaily = await prisma.$queryRaw<Array<{ day: Date; count: number }>>`
+      SELECT DATE(m."createdAt") as day, COUNT(*)::int as count
+      FROM message m
+      WHERE m."createdAt" BETWEEN ${start} AND ${end}
+      GROUP BY DATE(m."createdAt")
+      ORDER BY day ASC
+    `
+
     // Active contacts
     const activeContacts = await prisma.contact.count({
       where: {
@@ -89,6 +98,10 @@ export async function GET(req: NextRequest) {
       responseTimeData: responseTimeData.map((item) => ({
         time: item.day,
         avg: Math.round(Number(item.avgMinutes) * 10) / 10,
+      })),
+      messageVolumeDaily: messageVolumeDaily.map((item) => ({
+        date: item.day,
+        count: Number(item.count),
       })),
     })
   } catch (error) {
