@@ -15,34 +15,113 @@ import {
 } from "recharts"
 import { Download, TrendingUp } from "lucide-react"
 import Sidebar from "@/components/dashboard/sidebar"
+import { useEffect, useMemo, useState } from "react"
 
 export default function AnalyticsDashboard() {
-  const responseTimeData = [
-    { time: "Mon", avg: 2.3 },
-    { time: "Tue", avg: 2.1 },
-    { time: "Wed", avg: 2.5 },
-    { time: "Thu", avg: 2.0 },
-    { time: "Fri", avg: 1.8 },
-    { time: "Sat", avg: 3.2 },
-    { time: "Sun", avg: 2.9 },
-  ]
+  const [startDate, setStartDate] = useState<string>(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  )
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().slice(0, 10))
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<{
+    avgResponseTime: number
+    totalMessages: number
+    activeContacts: number
+    channelVolume: { channel: string; count: number }[]
+    responseTimeData: { time: string; avg: number }[]
+    messageVolumeDaily?: { date: string; count: number }[]
+  }>({ avgResponseTime: 0, totalMessages: 0, activeContacts: 0, channelVolume: [], responseTimeData: [], messageVolumeDaily: [] })
 
-  const channelData = [
-    { name: "WhatsApp", value: 4500 },
-    { name: "SMS", value: 3200 },
-    { name: "Email", value: 2800 },
-  ]
+  const COLORS = ["#4ade80", "#60a5fa", "#a78bfa", "#f472b6", "#f59e0b"]
 
-  const COLORS = ["#4ade80", "#60a5fa", "#a78bfa"]
+  const formatDateLabel = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  }
 
-  const volumeData = [
-    { date: "Jan", volume: 1200 },
-    { date: "Feb", volume: 1900 },
-    { date: "Mar", volume: 1500 },
-    { date: "Apr", volume: 2200 },
-    { date: "May", volume: 2800 },
-    { date: "Jun", volume: 3200 },
-  ]
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const params = new URLSearchParams({ startDate, endDate })
+      const res = await fetch(`/api/analytics?${params.toString()}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || json?.details || "Failed to load analytics")
+      // Normalize responseTimeData time to label
+      const rt = (json.responseTimeData || []).map((d: any) => ({
+        time: typeof d.time === "string" ? d.time : new Date(d.time).toISOString().slice(0, 10),
+        avg: d.avg,
+      }))
+      setData({
+        avgResponseTime: json.avgResponseTime || 0,
+        totalMessages: json.totalMessages || 0,
+        activeContacts: json.activeContacts || 0,
+        channelVolume: json.channelVolume || [],
+        responseTimeData: rt,
+        messageVolumeDaily: (json.messageVolumeDaily || []).map((d: any) => ({
+          date: typeof d.date === "string" ? d.date : new Date(d.date).toISOString().slice(0, 10),
+          count: d.count,
+        })),
+      })
+    } catch (e: any) {
+      setError(e?.message || "Failed to load analytics")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const channelData = useMemo(() => {
+    return data.channelVolume.map((c) => ({ name: c.channel, value: c.count }))
+  }, [data.channelVolume])
+
+  const volumeData = useMemo(() => {
+    if (data.messageVolumeDaily && data.messageVolumeDaily.length > 0) {
+      return data.messageVolumeDaily.map((d) => ({ date: d.date, volume: d.count }))
+    }
+    return []
+  }, [data.messageVolumeDaily])
+
+  // Last 15 days line series (fill missing dates with 0)
+  const volumeLast15Days = useMemo(() => {
+    const end = new Date(endDate)
+    const start = new Date(end)
+    start.setDate(end.getDate() - 14)
+    const map = new Map<string, number>()
+    volumeData.forEach((d) => map.set(d.date.slice(0, 10), d.volume))
+    const rows: { date: string; volume: number }[] = []
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10)
+      rows.push({ date: key, volume: map.get(key) ?? 0 })
+    }
+    return rows
+  }, [volumeData, endDate])
+
+  const exportCSV = () => {
+    const rows: string[] = []
+    rows.push("Metric,Value")
+    rows.push(`Avg Response Time (min),${data.avgResponseTime}`)
+    rows.push(`Total Messages,${data.totalMessages}`)
+    rows.push(`Active Contacts,${data.activeContacts}`)
+    rows.push("\nChannel,Count")
+    data.channelVolume.forEach((c) => rows.push(`${c.channel},${c.count}`))
+    rows.push("\nDate,Avg Response (min)")
+    data.responseTimeData.forEach((r) => rows.push(`${r.time},${r.avg}`))
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `analytics_${startDate}_${endDate}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <main className="min-h-screen">
@@ -64,23 +143,55 @@ export default function AnalyticsDashboard() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-white/5 backdrop-blur-xl border-b border-white/20 px-6 py-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <h1 className="text-white text-3xl font-bold">Analytics</h1>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-black font-semibold rounded-lg transition-colors text-sm">
-                <Download className="w-4 h-4" />
-                Export Report
-              </button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm"
+                  aria-label="Start date"
+                />
+                <span className="text-white/60">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm"
+                  aria-label="End date"
+                />
+                <button
+                  onClick={fetchAnalytics}
+                  disabled={loading}
+                  className="px-3 py-2 bg-black hover:bg-black/80 text-white rounded-lg text-sm disabled:opacity-50"
+                >
+                  {loading ? "Loading..." : "Refresh"}
+                </button>
+                <button
+                  onClick={exportCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-black font-semibold rounded-lg transition-colors text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Stats Grid */}
           <div className="flex-1 overflow-auto p-6">
             <div className="space-y-6">
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-200 text-sm rounded-lg p-3">
+                  {error}
+                </div>
+              )}
               {/* KPIs */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
                   <div className="text-white/70 text-sm font-medium">Avg Response Time</div>
-                  <div className="text-white text-3xl font-bold mt-2">2.3 min</div>
+                  <div className="text-white text-3xl font-bold mt-2">{data.avgResponseTime.toFixed(1)} min</div>
                   <div className="flex items-center gap-2 mt-2 text-green-400 text-xs">
                     <TrendingUp className="w-3 h-3" />
                     -12% from last week
@@ -88,7 +199,7 @@ export default function AnalyticsDashboard() {
                 </div>
                 <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
                   <div className="text-white/70 text-sm font-medium">Total Messages</div>
-                  <div className="text-white text-3xl font-bold mt-2">12,400</div>
+                  <div className="text-white text-3xl font-bold mt-2">{data.totalMessages}</div>
                   <div className="flex items-center gap-2 mt-2 text-green-400 text-xs">
                     <TrendingUp className="w-3 h-3" />
                     +8% from last week
@@ -96,7 +207,7 @@ export default function AnalyticsDashboard() {
                 </div>
                 <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
                   <div className="text-white/70 text-sm font-medium">Active Contacts</div>
-                  <div className="text-white text-3xl font-bold mt-2">847</div>
+                  <div className="text-white text-3xl font-bold mt-2">{data.activeContacts}</div>
                   <div className="flex items-center gap-2 mt-2 text-green-400 text-xs">
                     <TrendingUp className="w-3 h-3" />
                     +15% from last week
@@ -108,29 +219,37 @@ export default function AnalyticsDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Average Response Time */}
                 <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
-                  <h3 className="text-white font-semibold mb-4">Average Response Time</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={responseTimeData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis stroke="rgba(255,255,255,0.5)" style={{ fontSize: "12px" }} />
-                      <YAxis stroke="rgba(255,255,255,0.5)" style={{ fontSize: "12px" }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "rgba(0,0,0,0.8)",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          borderRadius: "8px",
-                        }}
-                        labelStyle={{ color: "#fff" }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="avg"
-                        stroke="#60a5fa"
-                        strokeWidth={2}
-                        dot={{ fill: "#60a5fa", r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <h3 className="text-white font-semibold mb-4">Message Volume (Last 15 Days)</h3>
+                  {volumeLast15Days.length === 0 ? (
+                    <div className="h-[300px] flex items-center justify-center text-white/60 text-sm">
+                      No messages in selected range
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={volumeLast15Days}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} stroke="rgba(255,255,255,0.6)" style={{ fontSize: "12px" }} />
+                        <YAxis allowDecimals={false} stroke="rgba(255,255,255,0.6)" style={{ fontSize: "12px" }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "rgba(0,0,0,0.9)",
+                            border: "1px solid rgba(255,255,255,0.2)",
+                            borderRadius: "8px",
+                            color: "#fff",
+                          }}
+                          labelFormatter={(v) => formatDateLabel(String(v))}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="volume"
+                          name="Messages"
+                          stroke="#a78bfa"
+                          strokeWidth={2}
+                          dot={{ fill: "#a78bfa", r: 3 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
 
                 {/* Channel Volume */}
@@ -158,36 +277,22 @@ export default function AnalyticsDashboard() {
                       </Pie>
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "rgba(0,0,0,0.8)",
+                          backgroundColor: "rgba(0,0,0,0.9)",
                           border: "1px solid rgba(255,255,255,0.2)",
                           borderRadius: "8px",
+                          color: "#fff",
                         }}
                         labelStyle={{ color: "#fff" }}
+                        itemStyle={{ color: "#fff" }}
+                        wrapperStyle={{ color: "#fff" }}
+                        formatter={(value: any, name: any) => [String(value), String(name)]}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
 
                 {/* Message Volume Trend */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6 lg:col-span-2">
-                  <h3 className="text-white font-semibold mb-4">Message Volume Trend</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={volumeData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis stroke="rgba(255,255,255,0.5)" style={{ fontSize: "12px" }} />
-                      <YAxis stroke="rgba(255,255,255,0.5)" style={{ fontSize: "12px" }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "rgba(0,0,0,0.8)",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          borderRadius: "8px",
-                        }}
-                        labelStyle={{ color: "#fff" }}
-                      />
-                      <Bar dataKey="volume" fill="#a78bfa" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Removed bottom duplicate volume chart to avoid empty space */}
               </div>
             </div>
           </div>

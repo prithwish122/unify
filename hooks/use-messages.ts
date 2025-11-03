@@ -58,6 +58,34 @@ export function useSendMessage() {
       }
       return res.json()
     },
+    onMutate: async (variables) => {
+      // Optimistic update for messages list
+      await queryClient.cancelQueries({ queryKey: ["messages"] })
+      const previousMessages = queryClient.getQueryData<any>(["messages"]) || null
+
+      const optimisticMessage = {
+        id: `temp_${Date.now()}`,
+        channel: variables.channel,
+        direction: "OUTBOUND",
+        status: variables.scheduledFor ? "SCHEDULED" : "SENT",
+        contactId: variables.contactId,
+        content: variables.content,
+        htmlContent: variables.htmlContent,
+        mediaUrls: variables.mediaUrls || [],
+        createdAt: new Date().toISOString(),
+        sentAt: variables.scheduledFor ? null : new Date().toISOString(),
+        _optimistic: true,
+      }
+
+      if (previousMessages && Array.isArray(previousMessages.messages)) {
+        queryClient.setQueryData(["messages"], {
+          ...previousMessages,
+          messages: [optimisticMessage, ...previousMessages.messages],
+        })
+      }
+
+      return { previousMessages }
+    },
     onSuccess: (_, variables) => {
       // Invalidate messages queries to refetch
       queryClient.invalidateQueries({ queryKey: ["messages"] })
@@ -66,6 +94,11 @@ export function useSendMessage() {
       // Force refetch to update UI immediately
       queryClient.refetchQueries({ queryKey: ["contacts"] })
       queryClient.refetchQueries({ queryKey: ["messages"] })
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(["messages"], context.previousMessages)
+      }
     },
   })
 }

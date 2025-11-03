@@ -1,3 +1,91 @@
+# Unify - Unified Inbox
+
+## Challenge: Faster Composer + Media for WhatsApp and Optimistic UX
+
+This app was enhanced to support a modern composing experience and real analytics with production-friendly media handling.
+
+### What was improved
+
+- Wider, taller compose panel for productivity (rich text, scheduling, media)
+- Optimistic UI when sending messages (instant feedback, rollback on failure)
+- Non‑blocking media previews (lazy loading/async decode)
+- WhatsApp image sending via Cloudinary uploads
+- Display of inbound WhatsApp media via a secure proxy
+- Automated cron runner for scheduled automations (dev + Vercel production)
+
+### How media sending/receiving was solved
+
+1) Problem: Twilio WhatsApp requires a public media URL; local `data:` URLs or files won’t work.
+
+Solution: Added `POST /api/upload`.
+- Uses Cloudinary if the SDK is present; otherwise falls back to Cloudinary’s unsigned REST API.
+- Returns a `secure_url` that Twilio accepts as `mediaUrl`.
+- Env vars used:
+  - `CLOUDINARY_CLOUD_NAME`
+  - `CLOUDINARY_UPLOAD_PRESET`
+  - Optional: `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+
+2) Problem: Inbound WhatsApp media (Twilio `MediaUrl0`) is not directly viewable in the browser because Twilio requires Basic Auth for media retrieval.
+
+Solution: Added `GET /api/media/proxy?url=...`.
+- Proxies Twilio media with Basic Auth using `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`.
+- Streams bytes back with correct `Content-Type` so the image displays in the UI.
+- UI automatically routes any `api.twilio.com` URL through the proxy.
+
+### Optimistic updates in the composer
+
+- The `useSendMessage` hook now performs an optimistic insert into the messages cache so users see their outbound message immediately while the request is in flight.
+- On error, the cache is rolled back.
+- On success, relevant queries are invalidated/refetched to reconcile with server state.
+
+### Performance/UX improvements
+
+- Compose editor min-height increased; panel width increased with responsive max width.
+- Image previews use `loading="lazy"` and `decoding="async"` to avoid blocking rendering.
+
+### Scheduled automations runner
+
+- A dev/self-hosted runner was added via `instrumentation.ts` (enabled with Next’s `instrumentationHook`). It calls `POST /api/cron/scheduled-messages` every minute.
+- For production on Vercel, `vercel.json` includes a cron to hit the same endpoint every minute.
+
+### Setup quick notes
+
+1. Environment variables (add to `.env`):
+
+```
+# Database
+DATABASE_URL=postgresql://...
+
+# Auth
+BETTER_AUTH_SECRET=...
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Twilio (SMS/WhatsApp)
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_DEFAULT_FROM=+1...
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+
+# Cloudinary (uploads for WhatsApp media)
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_UPLOAD_PRESET=...
+# Optional if you want signed uploads
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+# Cron
+CRON_SECRET=secret
+```
+
+2. Run dev:
+
+```
+npm run dev
+```
+
+With the above in place, you can attach images in the composer and send via WhatsApp; inbound images from Twilio will render in the contact modal.
+
 # 🚀 UNIFY - Unified Multi-Channel Inbox Platform
 
 A comprehensive full-stack application for team-based customer engagement that aggregates messages from multiple channels (SMS, WhatsApp, Email, and Social Media) into a single unified inbox.
