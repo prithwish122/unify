@@ -1,14 +1,12 @@
 "use client"
 
 import Sidebar from "@/components/dashboard/sidebar"
+import { useContacts } from "@/hooks/use-contacts"
+import { formatDistanceToNow } from "date-fns"
 
 export default function ContactsPage() {
-  const contacts = [
-    { id: 1, name: "Sarah Johnson", channels: ["WhatsApp", "Email"], lastContact: "2 hours ago" },
-    { id: 2, name: "Mike Chen", channels: ["SMS", "WhatsApp"], lastContact: "1 day ago" },
-    { id: 3, name: "Emma Wilson", channels: ["Email"], lastContact: "3 days ago" },
-    { id: 4, name: "David Lee", channels: ["WhatsApp"], lastContact: "1 week ago" },
-  ]
+  const { data, isLoading } = useContacts({ limit: 100 })
+  const contacts = data?.contacts || []
 
   return (
     <main className="min-h-screen">
@@ -43,21 +41,44 @@ export default function ContactsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {contacts.map((contact) => (
-                    <tr key={contact.id} className="border-b border-white/10 hover:bg-white/10 transition-colors">
-                      <td className="px-6 py-4 text-white">{contact.name}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          {contact.channels.map((channel) => (
-                            <span key={channel} className="bg-white/20 text-white text-xs px-2 py-1 rounded">
-                              {channel}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-white/70 text-sm">{contact.lastContact}</td>
+                  {isLoading && (
+                    <tr>
+                      <td className="px-6 py-6 text-white/70" colSpan={3}>Loading...</td>
                     </tr>
-                  ))}
+                  )}
+                  {!isLoading && contacts.length === 0 && (
+                    <tr>
+                      <td className="px-6 py-6 text-white/70" colSpan={3}>No contacts found</td>
+                    </tr>
+                  )}
+                  {!isLoading && contacts.map((contact: any) => {
+                    const channels = Array.from(
+                      new Set((contact.messages || []).map((m: any) => m.channel))
+                    ) as string[]
+                    const lastAt = contact.lastContactAt
+                      ? new Date(contact.lastContactAt)
+                      : (contact.createdAt ? new Date(contact.createdAt) : null)
+                    const lastContact = lastAt ? formatDistanceToNow(lastAt, { addSuffix: true }) : "—"
+                    const displayName = contact.name || contact.email || contact.phone || "Unknown"
+                    return (
+                      <tr key={contact.id} className="border-b border-white/10 hover:bg-white/10 transition-colors">
+                        <td className="px-6 py-4 text-white">{displayName}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            {channels.length === 0 && (
+                              <span className="bg-white/10 text-white/60 text-xs px-2 py-1 rounded">—</span>
+                            )}
+                            {channels.map((channel) => (
+                              <span key={channel} className="bg-white/20 text-white text-xs px-2 py-1 rounded">
+                                {channel.charAt(0) + channel.slice(1).toLowerCase()}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-white/70 text-sm">{lastContact}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

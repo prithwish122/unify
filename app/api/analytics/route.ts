@@ -4,6 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+
+export const dynamic = "force-dynamic"
 import { PrismaClient } from "@prisma/client"
 import { auth } from "@/lib/auth"
 
@@ -21,8 +23,11 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
 
+    // Build inclusive date range covering entire days in local time
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Default: 30 days ago
+    start.setHours(0, 0, 0, 0)
     const end = endDate ? new Date(endDate) : new Date()
+    end.setHours(23, 59, 59, 999)
 
     // Response time calculation (average time between inbound and outbound messages in a thread)
     const responseTimeData = await prisma.$queryRaw<Array<{ day: Date; avgMinutes: number }>>`

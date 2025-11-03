@@ -128,7 +128,9 @@ export const MergeContactsSchema = z.object({
  */
 export const AnalyticsExportSchema = z.object({
   format: z.enum(["csv", "pdf"]).default("csv"),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
+  type: z.enum(["summary", "messages"]).default("summary").optional(),
+  // Accept date-only (YYYY-MM-DD) or full ISO datetime strings
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
 })
 

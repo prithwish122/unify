@@ -10,6 +10,8 @@ import { AnalyticsExportSchema } from "@/lib/validations"
 
 const prisma = new PrismaClient()
 
+export const dynamic = "force-dynamic"
+
 /**
  * Convert data to CSV format
  */
@@ -32,7 +34,24 @@ function toCSV(data: any[], headers: string[]): string {
 /**
  * Generate CSV report
  */
-async function generateCSVReport(startDate?: Date, endDate?: Date): Promise<string> {
+function formatDateOnly(d: Date): string {
+  // Force text in Excel by prefixing apostrophe; keeps display without ######
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `'${yyyy}-${mm}-${dd}`
+}
+
+function formatDateTime(d: Date): string {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  const hh = String(d.getHours()).padStart(2, "0")
+  const mi = String(d.getMinutes()).padStart(2, "0")
+  return `'${yyyy}-${mm}-${dd} ${hh}:${mi}`
+}
+
+async function generateMessagesCSV(startDate?: Date, endDate?: Date): Promise<string> {
   const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const end = endDate || new Date()
 
@@ -54,7 +73,7 @@ async function generateCSVReport(startDate?: Date, endDate?: Date): Promise<stri
 
   // Format messages for CSV
   const csvData = messages.map((msg) => ({
-    date: msg.createdAt.toISOString(),
+    date: formatDateTime(new Date(msg.createdAt)),
     channel: msg.channel,
     direction: msg.direction,
     status: msg.status,
@@ -76,6 +95,71 @@ async function generateCSVReport(startDate?: Date, endDate?: Date): Promise<stri
     "content",
     "has_media",
   ])
+}
+
+async function generateSummaryCSV(startDate?: Date, endDate?: Date): Promise<string> {
+  // Normalize range
+  const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  start.setHours(0, 0, 0, 0)
+  const end = endDate || new Date()
+  end.setHours(23, 59, 59, 999)
+
+  // Channel volume
+  const channelVolume = await prisma.message.groupBy({
+    by: ["channel"],
+    where: { createdAt: { gte: start, lte: end } },
+    _count: { id: true },
+  })
+
+  const totalMessages = await prisma.message.count({ where: { createdAt: { gte: start, lte: end } } })
+  const activeContacts = await prisma.contact.count({ where: { lastContactAt: { gte: start, lte: end } } })
+
+  // Response time by day
+  const responseTimeData = await prisma.$queryRaw<Array<{ day: Date; avgMinutes: number }>>`
+    SELECT 
+      DATE(m1."createdAt") as day,
+      AVG(EXTRACT(EPOCH FROM (m2."createdAt" - m1."createdAt")) / 60) as "avgMinutes"
+    FROM message m1
+    INNER JOIN message m2 ON m1."threadId" = m2."threadId"
+    WHERE m1."direction" = 'INBOUND'
+      AND m2."direction" = 'OUTBOUND'
+      AND m1."createdAt" > m2."createdAt"
+      AND m1."createdAt" BETWEEN ${start} AND ${end}
+    GROUP BY DATE(m1."createdAt")
+    ORDER BY day ASC
+  `
+
+  const avgResponseTime = responseTimeData.length > 0
+    ? responseTimeData.reduce((s, r) => s + Number(r.avgMinutes), 0) / responseTimeData.length
+    : 0
+
+  // Message volume per day
+  const messageVolumeDaily = await prisma.$queryRaw<Array<{ day: Date; count: number }>>`
+    SELECT DATE(m."createdAt") as day, COUNT(*)::int as count
+    FROM message m
+    WHERE m."createdAt" BETWEEN ${start} AND ${end}
+    GROUP BY DATE(m."createdAt")
+    ORDER BY day ASC
+  `
+
+  // Build CSV with sections
+  const lines: string[] = []
+  lines.push("Metric,Value")
+  lines.push(`Avg Response (min),${Math.round(avgResponseTime * 10) / 10}`)
+  lines.push(`Total Messages,${totalMessages}`)
+  lines.push(`Active Contacts,${activeContacts}`)
+  lines.push("")
+  lines.push("Channel,Count")
+  for (const row of channelVolume) {
+    lines.push(`${row.channel},${row._count.id}`)
+  }
+  lines.push("")
+  lines.push("Date,Messages")
+  for (const v of messageVolumeDaily) {
+    const day = formatDateOnly(new Date(v.day))
+    lines.push(`${day},${Number(v.count)}`)
+  }
+  return lines.join("\n")
 }
 
 /**
@@ -106,18 +190,19 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const { format, startDate, endDate } = validation.data
+    const { format, type = "summary", startDate, endDate } = validation.data
 
     const start = startDate ? new Date(startDate) : undefined
     const end = endDate ? new Date(endDate) : undefined
 
     if (format === "csv") {
-      const csv = await generateCSVReport(start, end)
+      const csv = type === "messages" ? await generateMessagesCSV(start, end) : await generateSummaryCSV(start, end)
       const filename = `analytics-export-${new Date().toISOString().split("T")[0]}.csv`
 
-      return new NextResponse(csv, {
+      // Prepend UTF-8 BOM so Excel opens UTF-8 correctly
+      return new NextResponse("\uFEFF" + csv, {
         headers: {
-          "Content-Type": "text/csv",
+          "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="${filename}"`,
         },
       })
