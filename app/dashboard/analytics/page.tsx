@@ -45,7 +45,7 @@ export default function AnalyticsDashboard() {
       setLoading(true)
       setError(null)
       const params = new URLSearchParams({ startDate, endDate })
-      const res = await fetch(`/api/analytics?${params.toString()}`)
+      const res = await fetch(`/api/analytics?${params.toString()}`, { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || json?.details || "Failed to load analytics")
       // Normalize responseTimeData time to label
@@ -74,7 +74,16 @@ export default function AnalyticsDashboard() {
   useEffect(() => {
     fetchAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [startDate, endDate])
+
+  // Lightweight auto-refresh to keep numbers up to date
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetchAnalytics()
+    }, 30000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate])
 
   const channelData = useMemo(() => {
     return data.channelVolume.map((c) => ({ name: c.channel, value: c.count }))
@@ -102,25 +111,15 @@ export default function AnalyticsDashboard() {
     return rows
   }, [volumeData, endDate])
 
-  const exportCSV = () => {
-    const rows: string[] = []
-    rows.push("Metric,Value")
-    rows.push(`Avg Response Time (min),${data.avgResponseTime}`)
-    rows.push(`Total Messages,${data.totalMessages}`)
-    rows.push(`Active Contacts,${data.activeContacts}`)
-    rows.push("\nChannel,Count")
-    data.channelVolume.forEach((c) => rows.push(`${c.channel},${c.count}`))
-    rows.push("\nDate,Avg Response (min)")
-    data.responseTimeData.forEach((r) => rows.push(`${r.time},${r.avg}`))
-    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `analytics_${startDate}_${endDate}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const exportCSV = async () => {
+    const params = new URLSearchParams({ format: "csv", type: "summary", startDate, endDate })
+    // Let the browser handle the download via Content-Disposition
+    const link = document.createElement("a")
+    link.href = `/api/analytics/export?${params.toString()}`
+    link.rel = "noopener"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   return (
@@ -217,7 +216,7 @@ export default function AnalyticsDashboard() {
 
               {/* Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Average Response Time */}
+                {/* Message Volume */}
                 <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-6">
                   <h3 className="text-white font-semibold mb-4">Message Volume (Last 15 Days)</h3>
                   {volumeLast15Days.length === 0 ? (
