@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Menu, X, Inbox, Users, BarChart3, Settings, ChevronLeft, Pencil } from "lucide-react"
+import { Menu, X, Inbox, Users, BarChart3, Settings, ChevronLeft, Pencil, Clock } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import TwilioNumberBadge from "@/components/dashboard/twilio-number-badge"
 
 interface SidebarProps {
   onComposeClick?: () => void
@@ -14,6 +15,13 @@ export default function Sidebar({ onComposeClick }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { user, signOut } = useAuth()
+
+  // Debug: Log user image on mount/update
+  useEffect(() => {
+    if (user) {
+      console.log("User data:", { name: user.name, email: user.email, image: user.image })
+    }
+  }, [user])
 
   const handleSignOut = async () => {
     try {
@@ -47,6 +55,7 @@ export default function Sidebar({ onComposeClick }: SidebarProps) {
     { icon: Inbox, label: "Inbox", href: "/dashboard" },
     { icon: Users, label: "Contacts", href: "/dashboard/contacts" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
+    { icon: Clock, label: "Automations", href: "/dashboard/automations" },
     { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   ]
 
@@ -78,7 +87,7 @@ export default function Sidebar({ onComposeClick }: SidebarProps) {
         {!isCollapsed && (
           <button
             onClick={onComposeClick}
-            className="w-full flex items-center justify-center gap-2 bg-black hover:bg-black/80 text-white font-semibold px-4 py-4 rounded-lg transition-colors text-sm mb-6"
+            className="w-full flex items-center justify-center gap-2 bg-black hover:bg-black/80 text-white font-semibold px-4 py-4 rounded-lg transition-colors text-sm mb-4"
           >
             <Pencil className="w-4 h-4" />
             Compose
@@ -87,12 +96,15 @@ export default function Sidebar({ onComposeClick }: SidebarProps) {
         {isCollapsed && (
           <button
             onClick={onComposeClick}
-            className="w-full flex items-center justify-center bg-black hover:bg-black/80 text-white font-semibold px-4 py-4 rounded-lg transition-colors text-sm mb-6"
+            className="w-full flex items-center justify-center bg-black hover:bg-black/80 text-white font-semibold px-4 py-4 rounded-lg transition-colors text-sm mb-4"
             title="Compose"
           >
             <Pencil className="w-4 h-4" />
           </button>
         )}
+
+        {/* Twilio Trial Number Badge */}
+        {!isCollapsed && <TwilioNumberBadge />}
 
         {/* Navigation */}
         <nav className="space-y-2 flex-1">
@@ -123,7 +135,17 @@ export default function Sidebar({ onComposeClick }: SidebarProps) {
               } px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 mb-2`}
             >
               <Avatar className="w-8 h-8 flex-shrink-0">
-                {user.image && <AvatarImage src={user.image} alt={getUserDisplayName()} />}
+                {user.image && user.image.trim() !== "" && (
+                  <AvatarImage 
+                    src={user.image} 
+                    alt={getUserDisplayName()}
+                    onError={(e) => {
+                      console.error("Failed to load avatar image:", user.image)
+                      // Hide the image element on error, fallback will show
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                )}
                 <AvatarFallback className="bg-white/20 text-white text-xs font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>

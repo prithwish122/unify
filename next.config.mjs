@@ -2,17 +2,15 @@
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
-    
-  },
-  experimental: {
-    optimizeCss: false, // disables LightningCSS
   },
   images: {
     unoptimized: true,
   },
-  // Ensure API routes are included in build
+  // Consolidated experimental options
   experimental: {
+    optimizeCss: false, // disables LightningCSS
     serverComponentsExternalPackages: ['@prisma/client'],
+    instrumentationHook: true,
   },
 }
 

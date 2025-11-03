@@ -21,9 +21,9 @@ model User {
   updatedAt     DateTime @updatedAt
   role          UserRole @default(VIEWER) // Custom field for role-based access control
 
-  sessions Session[]
-  accounts Account[]
-  notes    Note[]
+  sessions          Session[]
+  accounts          Account[]
+  notes             Note[]
   scheduledMessages ScheduledMessage[]
 
   @@map("user")
@@ -86,24 +86,24 @@ enum UserRole {
 
 // Unified Message model - normalizes messages across all channels
 model Message {
-  id          String      @id @default(cuid())
-  channel     MessageChannel
-  direction   MessageDirection @default(INBOUND)
-  status      MessageStatus @default(PENDING)
-  threadId    String?     // Groups messages in a conversation thread
-  contactId   String
-  contact     Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  content     String      // Text content
-  htmlContent String?     // Rich HTML content
-  mediaUrls   String[]    // Array of media attachment URLs
-  externalId  String?     // External message ID from provider (e.g., Twilio SID)
-  scheduledFor DateTime?  // For scheduled messages
-  sentAt      DateTime?
-  deliveredAt DateTime?
-  readAt      DateTime?
-  metadata    Json?       // Provider-specific metadata
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id           String           @id @default(cuid())
+  channel      MessageChannel
+  direction    MessageDirection @default(INBOUND)
+  status       MessageStatus    @default(PENDING)
+  threadId     String? // Groups messages in a conversation thread
+  contactId    String
+  contact      Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  content      String // Text content
+  htmlContent  String? // Rich HTML content
+  mediaUrls    String[] // Array of media attachment URLs
+  externalId   String? // External message ID from provider (e.g., Twilio SID)
+  scheduledFor DateTime? // For scheduled messages
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  metadata     Json? // Provider-specific metadata
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([contactId])
   @@index([threadId])
@@ -137,20 +137,21 @@ enum MessageStatus {
 
 // Contact model - unified contact management
 model Contact {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?
-  phone         String?
-  socialHandles Json?     // { twitter: "@handle", facebook: "handle" }
-  avatar        String?
-  status        ContactStatus @default(UNREAD)
-  lastContactAt DateTime?
-  mergedWithId  String?   // For duplicate detection/merging
-  metadata      Json?     // Additional contact data
-  messages      Message[]
-  notes         Note[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String             @id @default(cuid())
+  name             String?
+  email            String?
+  phone            String?
+  socialHandles    Json? // { twitter: "@handle", facebook: "handle" }
+  avatar           String?
+  status           ContactStatus      @default(UNREAD)
+  lastContactAt    DateTime?
+  mergedWithId     String? // For duplicate detection/merging
+  metadata         Json? // Additional contact data
+  messages         Message[]
+  notes            Note[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  ScheduledMessage ScheduledMessage[]
 
   @@unique([email])
   @@index([phone])
@@ -167,19 +168,19 @@ enum ContactStatus {
 
 // Internal Notes model - threaded, with privacy
 model Note {
-  id          String    @id @default(cuid())
-  contactId   String
-  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  authorId    String
-  author      User      @relation(fields: [authorId], references: [id])
-  parentId    String?   // For threaded notes
-  parent      Note?     @relation("NoteThread", fields: [parentId], references: [id])
-  replies     Note[]    @relation("NoteThread")
-  content     String    // Rich text content
-  isPrivate   Boolean   @default(false)
-  mentions    String[]  // Array of @mentioned user IDs
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  parentId  String? // For threaded notes
+  parent    Note?    @relation("NoteThread", fields: [parentId], references: [id])
+  replies   Note[]   @relation("NoteThread")
+  content   String // Rich text content
+  isPrivate Boolean  @default(false)
+  mentions  String[] // Array of @mentioned user IDs
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([contactId])
   @@index([authorId])
@@ -189,31 +190,36 @@ model Note {
 
 // Scheduled Message Templates
 model ScheduledMessage {
-  id          String    @id @default(cuid())
-  name        String
-  template    String    // Message template content
-  channel     MessageChannel
+  id             String         @id @default(cuid())
+  name           String
+  template       String // Message template content
+  channel        MessageChannel
+  contactId      String? // Contact to send to (optional - can be all contacts)
+  contact        Contact?       @relation(fields: [contactId], references: [id], onDelete: Cascade)
   cronExpression String? // Cron-like expression for recurring
-  nextRunAt   DateTime
-  isActive    Boolean   @default(true)
-  createdById String
-  createdBy   User      @relation(fields: [createdById], references: [id])
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  recurrence     String? // User-friendly: "daily", "weekly", "once", etc.
+  recurrenceTime String? // Time for recurring (e.g., "09:00")
+  nextRunAt      DateTime
+  isActive       Boolean        @default(true)
+  createdById    String
+  createdBy      User           @relation(fields: [createdById], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([nextRunAt])
   @@index([isActive])
+  @@index([contactId])
   @@map("scheduled_message")
 }
 
 // Integration Configurations
 model Integration {
-  id            String    @id @default(cuid())
-  provider      String    // "twilio", "resend", "twitter", etc.
-  config        Json      // Provider-specific configuration
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  provider  String // "twilio", "resend", "twitter", etc.
+  config    Json // Provider-specific configuration
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([provider])
   @@map("integration")
@@ -221,14 +227,14 @@ model Integration {
 
 // Twilio Phone Numbers
 model TwilioNumber {
-  id            String    @id @default(cuid())
-  phoneNumber   String    @unique
+  id           String   @id @default(cuid())
+  phoneNumber  String   @unique
   friendlyName String?
-  sid           String    @unique // Twilio SID
-  status        String    // "active", "inactive"
-  capabilities  Json?     // { voice: true, sms: true, whatsapp: true }
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  sid          String   @unique // Twilio SID
+  status       String // "active", "inactive"
+  capabilities Json? // { voice: true, sms: true, whatsapp: true }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("twilio_number")
 }

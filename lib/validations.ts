@@ -57,18 +57,19 @@ export const CreateContactSchema = z.object({
  */
 export const UpdateContactSchema = z.object({
   name: z.string().optional(),
-  email: z.string().email("Invalid email format").optional(),
+  email: z.string().email("Invalid email format").optional().or(z.literal("")),
   phone: z
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format")
-    .optional(),
+    .optional()
+    .or(z.literal("")),
   socialHandles: z
     .object({
       twitter: z.string().optional(),
       facebook: z.string().optional(),
     })
     .optional(),
-  avatar: z.string().url("Invalid avatar URL").optional(),
+  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")),
   status: ContactStatusSchema.optional(),
 })
 
