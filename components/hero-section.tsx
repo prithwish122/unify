@@ -20,8 +20,8 @@ export default function HeroSection() {
         }
       >
         <img
-          src="/digital-blockchain-interface.jpg"
-          alt="hero"
+          src="/landing-scroll.png"
+          alt="Unify product preview"
           height={720}
           width={1400}
           className="mx-auto rounded-2xl object-cover h-full object-left-top"
