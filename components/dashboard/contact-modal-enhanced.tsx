@@ -11,6 +11,7 @@ import { useContact } from "@/hooks/use-contacts"
 import { useMessages } from "@/hooks/use-messages"
 import { formatDistanceToNow, format } from "date-fns"
 import type { Contact as ContactType } from "@/types/contact"
+import NoteEditorWithMentions from "@/components/dashboard/note-editor-with-mentions"
 
 interface ContactModalProps {
   contact: ContactType
@@ -36,6 +37,25 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
 
     setIsSubmittingNote(true)
     try {
+      // Extract mentions from text (format: @username)
+      const mentionRegex = /@(\w+)/g
+      const mentions: string[] = []
+      let match
+      while ((match = mentionRegex.exec(noteText)) !== null) {
+        // Fetch user ID from name/email
+        try {
+          const userRes = await fetch(`/api/users?search=${encodeURIComponent(match[1])}`)
+          if (userRes.ok) {
+            const userData = await userRes.json()
+            if (userData.users && userData.users.length > 0) {
+              mentions.push(userData.users[0].id)
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching user for mention:", e)
+        }
+      }
+
       const response = await fetch("/api/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,6 +63,7 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
           contactId: contact.id,
           content: noteText,
           isPrivate: isPrivateNote,
+          mentions: mentions,
         }),
       })
 
@@ -53,6 +74,7 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
       // Clear note and refetch
       setNoteText("")
       // The query will automatically refetch due to cache invalidation
+      window.location.reload() // Force refresh to show new note
     } catch (error) {
       console.error("Create note error:", error)
       alert(error instanceof Error ? error.message : "Failed to create note")
@@ -246,12 +268,14 @@ export default function ContactModalEnhanced({ contact, onClose }: ContactModalP
                     <span className="text-xs text-white">{isPrivateNote ? "Private" : "Public"} Note</span>
                   </button>
                 </div>
-                <textarea
+                <NoteEditorWithMentions
                   value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Add a note..."
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 resize-none text-sm mb-2"
-                  rows={4}
+                  onChange={setNoteText}
+                  placeholder="Add a note... Use @ to mention someone"
+                  onMention={(userId) => {
+                    // Mention is automatically included in the text
+                    console.log("Mentioned user:", userId)
+                  }}
                 />
                 <button
                   onClick={handleSendNote}

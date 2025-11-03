@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { useState } from "react"
 
 import { MessageCircle } from "lucide-react"
 import type { Contact } from "@/types/contact"
@@ -47,11 +48,25 @@ export default function KanbanColumn({
     return matchesSearch && matchesChannel
   })
 
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+
   return (
     <div
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, columnKey)}
-      className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-lg p-4 min-h-96 flex flex-col"
+      onDragOver={(e) => {
+        onDragOver(e)
+        setIsDraggingOver(true)
+      }}
+      onDragLeave={(e) => {
+        // Only set false if we're leaving the column entirely, not a child element
+        if (e.currentTarget === e.target) {
+          setIsDraggingOver(false)
+        }
+      }}
+      onDrop={(e) => {
+        setIsDraggingOver(false)
+        onDrop(e, columnKey)
+      }}
+      className={`bg-white/5 backdrop-blur-xl border ${isDraggingOver ? 'border-white/50 border-2' : 'border-white/20'} rounded-lg p-4 min-h-96 flex flex-col transition-all duration-200`}
     >
       {/* Column Header */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/10">
@@ -69,10 +84,18 @@ export default function KanbanColumn({
             return (
               <div
                 key={card.id}
-                draggable
-                onDragStart={(e) => onDragStart(e, columnKey, card.id)}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move"
+                  onDragStart(e, columnKey, card.id)
+                }}
+                onDragEnd={(e) => {
+                  // Reset cursor
+                  e.currentTarget.style.opacity = "1"
+                }}
                 onClick={() => onCardClick(card)}
-                className="bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-lg"
+                className="bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-lg select-none"
+                style={{ cursor: "grab" }}
               >
                 {/* Contact Header */}
                 <div className="flex items-start justify-between mb-2">

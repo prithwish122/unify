@@ -134,52 +134,75 @@ export default function KanbanBoardEnhanced({ onContactClick, searchQuery, filte
 
   const handleDrop = async (e: React.DragEvent, targetColumn: string) => {
     e.preventDefault()
+    e.stopPropagation()
+    
     const cardId = e.dataTransfer.getData("cardId")
     const sourceColumn = e.dataTransfer.getData("sourceColumn")
 
-    if (sourceColumn !== targetColumn) {
-      // Update contact status in database
-      try {
-        const newStatus = columnToStatus(targetColumn)
+    if (!cardId || !sourceColumn) {
+      console.warn("Missing drag data:", { cardId, sourceColumn })
+      return
+    }
 
-        const response = await fetch(`/api/contacts/${cardId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus }),
-        })
+    // Allow drop even if same column (for better UX)
+    const newStatus = columnToStatus(targetColumn)
 
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "Failed to update contact status")
-        }
+    // Optimistically update UI first
+    const cardToMove = cards[sourceColumn]?.find((c) => c.id === cardId)
+    if (!cardToMove) {
+      console.warn("Card not found:", cardId)
+      return
+    }
 
-        // Update local state optimistically
-        setCards((prev) => {
-          const sourceCards = [...prev[sourceColumn]]
-          const targetCards = [...prev[targetColumn]]
-          const cardToMove = sourceCards.find((c) => c.id === cardId)
-
-          if (cardToMove) {
-            sourceCards.splice(
-              sourceCards.findIndex((c) => c.id === cardId),
-              1,
-            )
-            targetCards.push({ ...cardToMove, status: targetColumn })
-          }
-
-          return {
-            ...prev,
-            [sourceColumn]: sourceCards,
-            [targetColumn]: targetCards,
-          }
-        })
-
-        // Refetch to ensure sync
-        refetch()
-      } catch (error) {
-        console.error("Failed to update contact status:", error)
-        alert(error instanceof Error ? error.message : "Failed to update contact status. Please try again.")
+    // Update local state immediately
+    setCards((prev) => {
+      const newCards = { ...prev }
+      if (sourceColumn !== targetColumn) {
+        // Remove from source
+        newCards[sourceColumn] = prev[sourceColumn].filter((c) => c.id !== cardId)
       }
+      // Add to target (avoid duplicates)
+      if (!newCards[targetColumn].some((c) => c.id === cardId)) {
+        newCards[targetColumn] = [...newCards[targetColumn], { ...cardToMove, status: targetColumn }]
+      }
+      return newCards
+    })
+
+    // Update contact status in database
+    try {
+      const response = await fetch(`/api/contacts/${cardId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        const errorMessage = errorData.error || errorData.details || "Failed to update contact status"
+        throw new Error(errorMessage)
+      }
+
+      const result = await response.json()
+      if (!result.contact) {
+        throw new Error("Contact update failed - no contact returned")
+      }
+
+      // Refetch to ensure sync
+      await refetch()
+    } catch (error) {
+      console.error("Failed to update contact status:", error)
+      // Revert optimistic update on error
+      setCards((prev) => {
+        const newCards = { ...prev }
+        // Remove from target
+        newCards[targetColumn] = prev[targetColumn].filter((c) => c.id !== cardId)
+        // Add back to source
+        if (!newCards[sourceColumn].some((c) => c.id === cardId)) {
+          newCards[sourceColumn] = [...newCards[sourceColumn], cardToMove]
+        }
+        return newCards
+      })
+      alert(error instanceof Error ? error.message : "Failed to update contact status. Please try again.")
     }
   }
 
