@@ -19,14 +19,15 @@ export async function POST(req: NextRequest) {
   try {
     // Verify cron secret OR allow admin users for testing
     const authHeader = req.headers.get("authorization")
+    const vercelCronHeader = req.headers.get("x-vercel-cron")
     const cronSecret = process.env.CRON_SECRET || "secret"
     
     // Check if user is admin (for manual testing from UI)
     const session = await auth.api.getSession({ headers: req.headers })
     const isAdmin = session?.user?.role === "ADMIN"
     
-    // Allow if admin OR correct bearer token
-    if (!isAdmin && authHeader !== `Bearer ${cronSecret}`) {
+    // Allow if admin OR correct bearer token OR triggered by Vercel Cron
+    if (!isAdmin && authHeader !== `Bearer ${cronSecret}` && !vercelCronHeader) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
